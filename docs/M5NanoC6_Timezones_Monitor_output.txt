@@ -1,0 +1,71 @@
+2024-10-13 13h50 utc+1
+
+Board: M5Stack M5NanoC6 with connected to GROVE Port: M5 OLED and RGB units
+
+Arduino IDE v2.3.3
+
+Sketch: M5NanoC6_Timezones.ino
+
+Monitor output (partially):
+
+13:50:29.971 -> loop(): Button was pressed.
+13:50:29.971 -> Going to do a software reset...
+13:50:29.971 -> 
+13:50:36.061 -> ESP-ROM:esp32c6-20220919
+13:50:36.061 -> Build:Sep 19 2022
+13:50:36.061 -> rst:0xc (SW_CPU),boot:0x6d (SPI_FAST_FLASH_BOOT)
+13:50:36.061 -> Saved PC:0x4001975a
+13:50:36.061 -> SPIWP:0xee
+13:50:36.061 -> mode:DIO, clock div:2
+13:50:36.061 -> load:0x4086c410,len:0xcf8
+13:50:36.061 -> load:0x4086e610,len:0x2e30
+13:50:36.061 -> load:0x40875728,len:0x113c
+13:50:36.061 -> entry 0x4086c410
+13:50:36.701 -> 
+13:50:36.701 -> 
+13:50:36.701 -> setup(): M5NanoC6 Timezones with OLED and RTC units test.
+13:50:36.833 -> 
+13:50:36.833 -> ESP32 Chip ID = 1FFEFF043254
+13:50:36.833 -> 
+13:50:41.363 -> chipid mirrored (same as M5Burner MAC): 54:32:04:FF:FE:1F
+13:50:36.833 -> 
+13:50:41.363 -> WiFi Connected
+13:50:41.363 -> sntp_initialize(): sntp polling interval: 15 Minute(s)
+13:50:41.363 -> setup(): sntp_sync_status = RESET
+13:50:43.392 -> Europe/Lisbon, Monday, October 14 2024 13:50:44 zone WEST +0100 
+13:50:46.003 -> time_sync_notification_cb(): calling initTime()
+13:50:46.003 -> initTime(): Setting configTzTime to: "WET0WEST,M3.5.0/1,M10.5.0"
+13:50:46.003 -> initTime(): NTP Connected. 
+13:50:47.017 -> time_sync_notification_cb(): time synchronized at time (UTC): Mon Oct 14 12:50:48 2024  <<<=== NPT time sync
+13:51:09.108 -> America/Kentucky/Louisville, Monday, October 14 2024 08:51:10 zone EDT -0400 
+13:51:34.819 -> America/New_York, Monday, October 14 2024 08:51:35 zone EDT -0400 
+13:52:00.520 -> America/Sao_Paulo, Monday, October 14 2024 09:52:01 zone -03 -0300 
+13:52:26.244 -> Europe/Amsterdam, Monday, October 14 2024 14:52:27 zone CEST +0200 
+13:52:51.986 -> Australia/Sydney, Monday, October 14 2024 23:52:53 zone AEDT +1100 
+13:53:17.689 -> Europe/Lisbon, Monday, October 14 2024 13:53:18 zone WEST +0100 
+13:53:43.452 -> America/Kentucky/Louisville, Monday, October 14 2024 08:53:44 zone EDT -0400 
+13:54:09.157 -> America/New_York, Monday, October 14 2024 08:54:10 zone EDT -0400 
+13:54:34.886 -> America/Sao_Paulo, Monday, October 14 2024 09:54:35 zone -03 -0300 
+13:55:00.623 -> Europe/Amsterdam, Monday, October 14 2024 14:55:01 zone CEST +0200 
+13:55:26.327 -> Australia/Sydney, Monday, October 14 2024 23:55:27 zone AEDT +1100 
+13:55:52.024 -> Europe/Lisbon, Monday, October 14 2024 13:55:53 zone WEST +0100 
+13:56:17.774 -> America/Kentucky/Louisville, Monday, October 14 2024 08:56:18 zone EDT -0400 
+13:56:43.486 -> America/New_York, Monday, October 14 2024 08:56:44 zone EDT -0400 
+13:57:09.234 -> America/Sao_Paulo, Monday, October 14 2024 09:57:10 zone -03 -0300 
+13:57:34.935 -> Europe/Amsterdam, Monday, October 14 2024 14:57:36 zone CEST +0200 
+13:58:00.637 -> Australia/Sydney, Monday, October 14 2024 23:58:01 zone AEDT +1100 
+13:58:26.378 -> Europe/Lisbon, Monday, October 14 2024 13:58:27 zone WEST +0100 
+
+[...]
+
+14:04:00.770 -> America/Kentucky/Louisville, Monday, October 14 2024 09:04:01 zone EDT -0400 
+14:04:26.476 -> America/New_York, Monday, October 14 2024 09:04:27 zone EDT -0400 
+14:04:52.199 -> America/Sao_Paulo, Monday, October 14 2024 10:04:53 zone -03 -0300 
+14:05:17.961 -> Europe/Amsterdam, Monday, October 14 2024 15:05:19 zone CEST +0200 
+14:05:43.686 -> Australia/Sydney, Tuesday, October 15 2024 00:05:44 zone AEDT +1100 
+14:05:49.041 -> time_sync_notification_cb(): calling initTime()
+14:05:49.081 -> initTime(): Setting configTzTime to: "AEST-10AEDT,M10.1.0,M4.1.0/3"
+14:05:49.081 -> initTime(): NTP Connected. 
+14:05:50.065 -> time_sync_notification_cb(): time synchronized at time (UTC): Mon Oct 14 13:05:51 2024  <<<=== NPT time sync
+
+[...]
