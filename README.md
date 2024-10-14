@@ -20,8 +20,10 @@ This project contains an Arduino sketch for a M5Stack M5NanoC6 device, a 1.3 inc
 The OLED and RTC units are connected to the GROVE Port of a M5NanoC6 device via a GROVE HUB.
 
 About i2c_scan with following units connected to M5NanoC6, Port A: RTC unit and OLED unit:
+```
 I2C device found at address 0x3c !  = OLED unit
 I2C device found at address 0x51 !  = RTC unit
+```
 
 After applying power to the M5NanoC6 device, the sketch will sequentially display data of six pre-programmed timezones.
 
@@ -86,7 +88,7 @@ Update the file secret.h as far as needed:
 Update 2024-10-13: Solved a problem that there was no board "M5NanoC6". In Arduino IDE v2.3.3. BOARDS MANAGER
 appeared to be installed "esp32 from Espressif Systems" version "3.1.0 RC". 
 I downgraded it to the stable version "3.0.5", which contains the "M5NanoC6"
-Device info in pint_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x1001
+Device info in pins_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x1001
 
 Update 2024-10-14: in function disp_data() the integer variable disp_data_view_delay controls the "rithm" of renewal of the 4 view pages.
 
