@@ -79,6 +79,8 @@ Update the file secret.h as far as needed:
 ```
  a) your WiFi SSID in SECRET_SSID;
  b) your WiFi PASSWORD in SECRET_PASS;
+ c) your WiFi SECRET_MOBILE_SSID. (if not needed/wanted make the string empty);
+ c) your WiFi SECRET_MOBILE_PASS. (if not needed/wanted make the string empty);
  c) the name of the NTP server of your choice in SECRET_NTP_SERVER_1, for example: 2.pt.pool.ntp.org;
  d) the SECRET_NTP_NR_OF_ZONES as a string, e.g.: "7";
  e) the TIMEZONE and TIMEZONE_CODE texts for each of the zones you want to be displayed.
@@ -109,6 +111,13 @@ Device info in pins_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x100
 
 Update 2024-10-14: in function disp_data() the integer variable disp_data_view_delay controls the "rithm" of renewal of the 4 view pages.
 
+Update 2024-10-15: 
+```
+- added functionality to connect to WiFi of a mobile phone;
+- Moved some code from function initTime() to loop().
+- Created global boolean variable "wait_until_sntp_notification_cb".
+  This variable is set in function time_sntp_notification_cb(). It is used in loop() during startup to make sure that certain events happen in a wanted order.
+```
 How this sketch works:
 
 After startup the sketch the function create_maps() reads all the timezone and timezone_code text strings that are defined
