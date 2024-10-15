@@ -36,7 +36,7 @@ For each of the seven timezones, in four steps, the following data will be displ
 Each time zone sequence of four displays is repeated for 25 seconds. This repeat time is defined in function ```loop()```:
 
 ```
-760 unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
+718 unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
 ```
 M5NanoC6 reset:
 
@@ -47,7 +47,7 @@ The sketch will connect to a NTP server of your choice. In this version the sket
 The following define sets the NTP polling interval time:
 
 ```
-95 #define CONFIG_LWIP_SNTP_UPDATE_DELAY  15 * 60 * 1000 // = 15 minutes
+105 #define CONFIG_LWIP_SNTP_UPDATE_DELAY  15 * 60 * 1000 // = 15 minutes
 ```
 
 At the moment of a NTP Time Synchronization, the RGB Led of the M5NanoC6 wil cycle three colors.
