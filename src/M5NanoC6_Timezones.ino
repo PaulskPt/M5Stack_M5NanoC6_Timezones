@@ -1,7 +1,32 @@
 /* 
-* Sketch for M5Stack M5NanoC6 device with a 1.3 inch OLED SH1107 display with 128 x 64 pixels and a RTC unit (8563)
-* The OLED and RTC units are connected to the GROVE Port of a M5NanoC6 device via a GROVE HUB.
+*  Test sketch for M5Stack M5NanoC6 device with a 1.3 inch OLED SH1107 display with 128 x 64 pixels and a RTC unit (8563)
 * by @PaulskPt 2024-10-13
+* The OLED and RTC units are connected to the GROVE Port of a M5NanoC6 device via a GROVE HUB.
+* Update: 2024-10-12. Ported this sketch from  a M5Stack M5Dial device.
+*
+* About i2c_scan with following units connected to M5NanoC6, Port A: RTC unit and OLED unit:
+* I2C device found at address 0x3c !  = OLED unit
+* I2C device found at address 0x51 !  = RTC unit
+*
+* Update 2024-10-13: Solved a problem that there was no board "M5NanoC6". In Arduino IDE v2.3.3. BOARDS MANAGER
+*     appeared to be installed "esp32 from Espressif Systems" version "3.1.0 RC". 
+*     I downgraded it to the stable version "3.0.5", which contains the "M5NanoC6"
+* Device info in pint_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x1001
+*
+* Update 2024-10-14: in function disp_data() the integer variable disp_data_view_delay controls the "rithm" of renewal of the 4 view pages.
+*
+* How this sketch works:
+* After startup the sketch the function create_maps() reads all the timezone and timezone_code text strings that are defined
+* in the file secret.h into a map (like a dictionary in Python).
+* Then the sketch tries to make WiFi contact. If WiFi is OK, then s polling sequence interval request will be set.
+* At the polling interval time a requeste for a datetime will be sent to the NTP server.
+* The global variable CONFIG_LWIP_SNTP_UPDATE_DELAY defines the polling interval. In this moment 15 minutes.
+* When the datetime stamp is received from an NTP server, the external RTC will be set. Next the sketch will cycle through and
+* display timezone information and local date and time for each of siz pre-programmed timezones.
+* A cycle of displaying the seven timezones takes about 3 minutes.
+*
+* See: Complete list of zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+*
 * License: MIT.
 */
 #include <M5GFX.h>
@@ -9,18 +34,20 @@
 #include <M5NanoC6.h>
 #include <Unit_RTC.h>
 
+//#include <esp_sntp.h>
 #ifdef sntp_getoperatingmode
 #undef sntp_getoperatingmode
 #endif
 
-//#include <esp_sntp.h>
-#include <sntp.h>
+#include "C:\\Users\\pauls2\\Documenten\\Arduino\\hardware\\espressif\\esp32\\tools\\sdk\\esp32\\include\\lwip\\lwip\\src\\include\\lwip\\apps\\sntp.h"
+//#include <sntp.h>
 #include <WiFi.h>
 #include <TimeLib.h>
 #include <stdlib.h>   // for putenv
 #include <time.h>
 #include <DateTime.h> // See: /Arduino/libraries/ESPDateTime/src
 
+//#include <M5Unified.h>
 #include <Adafruit_NeoPixel.h>
 #include "secret.h"
 
@@ -57,8 +84,6 @@ int dh = display.height();
 
 #define WIFI_SSID     SECRET_SSID // "YOUR WIFI SSID NAME"
 #define WIFI_PASSWORD SECRET_PASS //"YOUR WIFI PASSWORD"
-#define NTP_TIMEZONE  SECRET_NTP_TIMEZONE // for example: "Europe/Lisbon"
-#define NTP_TIMEZONE_CODE  SECRET_NTP_TIMEZONE_CODE // for example: "WET0WEST,M3.5.0/1,M10.5.0"
 #define NTP_SERVER1   SECRET_NTP_SERVER_1 // "0.pool.ntp.org"
 #define NTP_SERVER2   "1.pool.ntp.org"
 #define NTP_SERVER3   "2.pool.ntp.org"
@@ -135,19 +160,15 @@ volatile bool buttonPressed = false;
 #define blue_delay_time  300
 
 const char* boardName;
-static constexpr const char* wd[7] = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+static constexpr const char* wd[7] PROGMEM = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
 char text[50];
 size_t textlen = 0;
 
 unsigned long zone_chg_start_t = millis();
 bool TimeToChangeZone = false;
 
-int zone_idx = 0;
-const int zone_max_idx = 6;
-/*
-std::string zones[zone_max_idx] = {"Europe/Lisbon", "America/Kentucky/Louisville", "America/New_York", "America/Sao_Paulo", "Europe/Amsterdam", "Australia/Sydney"};
-std::string zone_code[zone_max_idx] = {"WET0WEST,M3.5.0/1,M10.5.0", "EST5EDT,M3.2.0,M11.1.0", "EST5EDT,M3.2.0,M11.1.0", "<-03>3", "CET-1CEST,M3.5.0,M10.5.0/3", "AEST-10AEDT,M10.1.0,M4.1.0/3" };
-*/
+int zone_idx; // Will be incremented in loop()
+static constexpr const int nr_of_zones = SECRET_NTP_NR_OF_ZONES[0] - '0';  // Assuming SECRET_NTP_NR_OF_ZONES is defined as a string
 
 std::map<int, std::tuple<std::string, std::string>> zones_map;
 
@@ -156,78 +177,40 @@ std::map<int, std::tuple<std::string, std::string>> zones_map;
 // Function prototype (to prevent error 'rgb_led_wheel' was not declared in this scope)
 void rgb_led_wheel(bool);
 
-void create_maps(void) 
+void create_maps() 
 {
-  zones_map[0] = std::make_tuple("Asia/Tokyo", "JST-9");
-  zones_map[1] = std::make_tuple("America/Kentucky/Louisville", "EST5EDT,M3.2.0,M11.1.0");
-  zones_map[2] = std::make_tuple("America/New_York", "EST5EDT,M3.2.0,M11.1.0");
-  zones_map[3] = std::make_tuple("America/Sao_Paulo", "<-03>3");
-  zones_map[4] = std::make_tuple("Europe/Amsterdam", "CET-1CEST,M3.5.0,M10.5.0/3");
-  zones_map[5] = std::make_tuple("Australia/Sydney", "AEST-10AEDT,M10.1.0,M4.1.0/3");
-
-  // Iterate and print the elements
-  /*
-  std::cout << "create_maps(): " << std::endl;
-  for (const auto& pair : zones_map)
-  {
-    std::cout << "Key: " << pair.first << ". Values: ";
-    std::cout << std::get<0>(pair.second) << ", ";
-    std::cout << std::get<1>(pair.second) << ", ";
-    std::cout << std::endl;
-  }
-  */
-}
-
-void map_replace_first_zone(void)
-{
-  bool ret = false;
-  int tmp_zone_idx = 0;
-  std::string elem_zone_original;
-  std::string elem_zone_code_original;
-  elem_zone  = std::get<0>(zones_map[tmp_zone_idx]);
-  elem_zone_code  = std::get<1>(zones_map[tmp_zone_idx]);
-  std::string elem_zone_check;
-  std::string elem_zone_code_check;
   
-  elem_zone_original = elem_zone; // make a copy
-  elem_zone_code_original = elem_zone_code;
-  elem_zone = NTP_TIMEZONE;
-  elem_zone_code = NTP_TIMEZONE_CODE;
-  zones_map[0] = std::make_tuple(elem_zone, elem_zone_code);
-  // Check:
-  elem_zone_check  = std::get<0>(zones_map[tmp_zone_idx]);
-  elem_zone_code_check  = std::get<1>(zones_map[tmp_zone_idx]);
-
-  /*
-  std::cout << "Map size before erase: " << myMap.size() << std::endl;
-
-  for (int i = 0; i < 2; i++
+  for (int i = 0; i < nr_of_zones; ++i)
   {
-    // Get iterator to the element with key i
-    auto it = zones_map.find(i);
-    if (it != zones_map.end())
+    // Building variable names dynamically isn't directly possible, so you might want to define arrays instead
+    switch (i)
     {
-        zones_map.erase(it);
-    }
-  std::cout << "Map size after erase: " << myMap.size() << std::endl;
-  */
- 
-  if (my_debug)
-  {
-    std::cout << "map_replace_first_zone(): successful replaced the first record of the zone_map:" << std::endl;
-    
-    std::cout << "zone original: \"" << elem_zone_original.c_str() << "\""
-      << ", replaced by zone: \"" << elem_zone_check.c_str()  << "\""
-      << " (from file secrets.h)" 
-      << std::endl;
-    
-    std::cout << "zone code original: \"" <<  elem_zone_code_original.c_str() << "\""
-      << ", replaced by zone code: \"" << elem_zone_code_check.c_str() << "\""
-      << std::endl;
+      case 0:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE0, SECRET_NTP_TIMEZONE0_CODE);
+        break;
+      case 1:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE1, SECRET_NTP_TIMEZONE1_CODE);
+        break;
+      case 2:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE2, SECRET_NTP_TIMEZONE2_CODE);
+        break;
+      case 3:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE3, SECRET_NTP_TIMEZONE3_CODE);
+        break;
+      case 4:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE4, SECRET_NTP_TIMEZONE4_CODE);
+        break;
+      case 5:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE5, SECRET_NTP_TIMEZONE5_CODE);
+        break;
+      case 6:
+        zones_map[i] = std::make_tuple(SECRET_NTP_TIMEZONE6, SECRET_NTP_TIMEZONE6_CODE);
+        break;
+      default:
+        break;
+    }             
   }
 }
-
-
 
 /* Show or remove NTP Time Sync notification on the middle of the top of the display */
 void ntp_sync_notification_txt(bool show)
@@ -245,41 +228,27 @@ void ntp_sync_notification_txt(bool show)
   }
 }
 
-bool is_tm_empty(const std::tm& timeinfo)
-{
-  return timeinfo.tm_sec == 0 && timeinfo.tm_min  == 0 && timeinfo.tm_hour  == 0 &&
-        timeinfo.tm_mday == 0 && timeinfo.tm_mon  == 0 && timeinfo.tm_year  == 0 &&
-        timeinfo.tm_wday == 0 && timeinfo.tm_yday == 0 && timeinfo.tm_isdst == 0;
-}
-
 void time_sync_notification_cb(struct timeval *tv)
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("time_sync_notification_cb(): ");
-  if (my_debug)
-  {
-    if (tv != nullptr) 
-    {
-      std::cout << *TAG << "Parameter *tv, tv-<tv_sec (Seconds): " << 
-        tv->tv_sec << ", tv->tv_usec (microSeconds): " << tv->tv_usec << std::endl;
-    } 
-    else 
-    {
-      std::cerr << *TAG << "Invalid timeval pointer" << std::endl;
-    }
-  }
-  std::cout << *TAG << "calling initTime()" << std::endl;
+  static constexpr const char txt1[] PROGMEM = "time_sync_notification_cb(): ";
+  static constexpr const char txt2[] PROGMEM = "calling initTime()";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
+  std::cout << *TAG << txt2 << std::endl;
   if (initTime())
   {
     time_t t = time(NULL);
-    std::cout << *TAG << "time synchronized at time (UTC): " << asctime(gmtime(&t)) << std::flush;  // prevent a 2nd LF. Do not use std::endl
+    static constexpr const char txt3[] PROGMEM = "time synchronized at time (UTC): ";
+    std::cout << *TAG << txt3 << asctime(gmtime(&t)) << std::flush;  // prevent a 2nd LF. Do not use std::endl
     ntp_sync_notification_txt(true);
   }
 }
 
 void sntp_initialize()
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("sntp_initialize(): ");
-  if (sntp_enabled()) { 
+  static constexpr const char txt1[] PROGMEM = "sntp_initialize(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
+  if (sntp_enabled()) 
+  { 
     sntp_stop();  // prevent initialization error
   }
   sntp_setoperatingmode(SNTP_OPMODE_POLL);
@@ -288,182 +257,74 @@ void sntp_initialize()
   sntp_set_time_sync_notification_cb(time_sync_notification_cb);
   sntp_init();
   
-  if (my_debug)
-  {
-    std::cout << *TAG << "sntp initialized" << std::endl;
-    std::cout << *TAG << "sntp set to polling mode" << std::endl;
-  }
-  std::cout << *TAG << "sntp polling interval: " << 
-    std::to_string(CONFIG_LWIP_SNTP_UPDATE_DELAY/60000) << " Minute(s)" << std::endl;
+  static constexpr const char txt4[] PROGMEM = "sntp polling interval: ";
+  static constexpr const char txt5[] PROGMEM = " Minute(s)";
+  std::cout << *TAG << txt4 << std::to_string(CONFIG_LWIP_SNTP_UPDATE_DELAY/60000) << txt5 << std::endl;
 }
 
 void setTimezone(void)
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("setTimezone(): ");
+  static constexpr const char txt1[] PROGMEM = "setTimezone(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   elem_zone = std::get<0>(zones_map[zone_idx]);
   elem_zone_code = std::get<1>(zones_map[zone_idx]);
   if (elem_zone_code != elem_zone_code_old)
   {
     elem_zone_code_old = elem_zone_code;
-    const char s1[] = "has changed to: ";
+    const char s1[] PROGMEM = "has changed to: ";
     zone_has_changed = true;
-    //std::cout << *TAG << "Sending cmd to beep to Atom Echo" << std::endl;
-    //send_cmd_to_AtomEcho(); // Send a digital signal to the Atom Echo to produce a beep
-    if (my_debug)
-    {
-      std::cout << *TAG << "Timezone " << s1 << "\"" << elem_zone.c_str() << "\"" << std::endl;
-      std::cout << *TAG << "Timezone code " << s1 << "\"" << elem_zone_code.c_str() << "\"" << std::endl;
-    }
   }
-  /*
-    See: https://docs.espressif.com/projects/esp-idf/en/v5.0.2/esp32/api-reference/system/system_time.html#sntp-time-synchronization
-    Call setenv() to set the TZ environment variable to the correct value based on the device location. 
-    The format of the time string is the same as described in the GNU libc documentation (although the implementation is different).
-    Call tzset() to update C library runtime data for the new timezone.
-  */
-  // std::cout << *TAG << "Setting Timezone to \"" << (elem_zone_code.c_str()) << "\"\n" << std::endl;
   setenv("TZ",elem_zone_code.c_str(),1);
-  //  Now adjust the TZ.  Clock settings are adjusted to show the new local time
   delay(500);
   tzset();
   delay(500);
-
-  if (my_debug)
-  {
-    // Check:
-    std::cout << *TAG << "check environment variable TZ = \"" << getenv("TZ") << "\"" << std::endl;
-  }
 }
-
-/*
-  The getLocalTime() function is often used in microcontroller projects, such as with the ESP32, 
-  to retrieve the current local time from an NTP (Network Time Protocol) server. 
-  Here’s a simple example of how you can use this function with the ESP32:
-*/
-bool poll_NTP()
-{
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("poll_NTP(): ");
-  bool ret = false;
-
-  if(getLocalTime(&timeinfo))
-  {
-    std::cout << "getLocalTime(&timeinfo): timeinfo = " << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S") << std::endl;
-    ret = true;
-  }
-  else
-  {
-    std::cout << *TAG << "Failed to obtain time " << std::endl;
-    canvas.clear();
-    canvas.setCursor(hori[0], vert[2]);
-    canvas.print("Failed to obtain time");
-    display.waitDisplay();
-    canvas.pushSprite(&display, 0, (display.height() - canvas.height()) >> 1);
-    delay(3000);
-  }
-  return ret;
-}
-
-/*
-bool initTime(void)
-{
-  bool ret = false;
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("initTime(): ");
-  elem_zone = std::get<0>(zones_map[zone_idx]);
-  elem_zone_code = std::get<1>(zones_map[zone_idx]);
-
-  if (my_debug)
-  {
-    std::cout << *TAG << "Setting up time" << std::endl;
-    std::cout << "zone       = \"" << elem_zone.c_str() << "\"" << std::endl;
-    std::cout << "zone code  = \"" << elem_zone_code.c_str() << "\"" << std::endl;
-    std::cout 
-      << "NTP_SERVER1 = \"" << NTP_SERVER1 << "\", " 
-      << "NTP_SERVER2 = \"" << NTP_SERVER2 << "\", "
-      << "NTP_SERVER3 = \"" << NTP_SERVER3 << "\""
-      << std::endl;
-  }
-  // Init and get the time
-  // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  // printLocalTime();
-}
-*/
 
 bool initTime(void)
 {
   bool ret = false;
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("initTime(): ");
+  static constexpr const char txt1[] PROGMEM = "initTime(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   elem_zone = std::get<0>(zones_map[zone_idx]);
-  //elem_zone_code = std::get<1>(zones_map[zone_idx]);
-
-  /*
-  * See answer from: bperrybap (March 2021, post #6)
-  * on: https://forum.arduino.cc/t/getting-time-from-ntp-service-using-nodemcu-1-0-esp-12e/702333/5
-  */
 
 #ifndef ESP32
 #define ESP32 (1)
 #endif
 
-//=========== UNDER TEST ON 2024-10-14 ====================================================
 std::string my_tz_code = getenv("TZ");
-
-if (my_debug)
-{
-  std::cout << *TAG << "Setting up time" << std::endl;
-  std::cout << "zone                 = \"" << elem_zone.c_str() << "\"" << std::endl;
-  //std::cout << "elem_zone_code       = \"" << elem_zone_code.c_str() << "\"" << std::endl;
-  std::cout << "getenv(\"TZ\") code    = \"" << my_tz_code.c_str() << "\"" << std::endl;
-  std::cout 
-    << "NTP_SERVER1 = \"" << NTP_SERVER1 << "\", " 
-    << "NTP_SERVER2 = \"" << NTP_SERVER2 << "\", "
-    << "NTP_SERVER3 = \"" << NTP_SERVER3 << "\""
-    << std::endl;
-}
 
 // See: /Arduino/libraries/ESPDateTime/src/DateTime.cpp, lines 76-80
 #if defined(ESP8266)
   configTzTime(elem_zone_code.c_str(), NTP_SERVER1, NTP_SERVER2, NTP_SERVER3); 
 #elif defined(ESP32)
-  std::cout << *TAG << "Setting configTzTime to: \"" << my_tz_code.c_str() << "\"" << std::endl;
-  // configTime(0, 3600, NTP_SERVER1);
+static constexpr const char txt7[] PROGMEM = "Setting configTzTime to: \"";
+  std::cout << *TAG << txt7 << my_tz_code.c_str() << "\"" << std::endl;
+  //configTime(0, 3600, NTP_SERVER1);
   configTzTime(my_tz_code.c_str(), NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);  // This one is use for the M5Stack Atom Matrix
 #endif
-
-//=========== END TEST ON 2024-10-14 ======================================================
 
   while (!getLocalTime(&timeinfo, 1000))
   {
     std::cout << "." << std::flush;
     delay(1000);
   };
+  static constexpr const char txt8[] PROGMEM = "NTP Connected. ";
+  std::cout << *TAG << txt8 << std::endl;
 
-  std::cout << *TAG << "NTP Connected. " << std::endl;
-
-  if (is_tm_empty(timeinfo))
+  if (timeinfo.tm_sec == 0 && timeinfo.tm_min  == 0 && timeinfo.tm_hour  == 0 &&
+      timeinfo.tm_mday == 0 && timeinfo.tm_mon  == 0 && timeinfo.tm_year  == 0 &&
+      timeinfo.tm_wday == 0 && timeinfo.tm_yday == 0 && timeinfo.tm_isdst == 0)
   {
-    std::cout << *TAG << "Failed to obtain datetime from NTP" << std::endl;
+    static constexpr const char txt9[] PROGMEM = "Failed to obtain datetime from NTP";
+    std::cout << *TAG << txt9 << std::endl;
   }
   else
   {
-    if (my_debug)
-    {
-      std::cout << *TAG << "Got this datetime from NTP: " << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S") << std::endl;
-    }
-    // Now we can set the real timezone
     setTimezone();
-
     ret = true;
   }
   return ret;
 }
-
-
-
-
-
-
-
-
 
 /*
     The settimeofday function is used to set the system’s date and time. 
@@ -483,7 +344,8 @@ void setTime(int yr, int month, int mday, int hr, int minute, int sec, int isDst
   tm.tm_sec = sec;
   tm.tm_isdst = isDst;  // 1 or 0
   time_t t = mktime(&tm);
-  std::cout << "Setting time: " << (asctime(&tm)) << std::endl;
+  static constexpr const char txt1[] PROGMEM = "Setting time: ";
+  std::cout << txt1 << (asctime(&tm)) << std::endl;
   struct timeval now = { .tv_sec = t };
   settimeofday(&now, NULL);
 }
@@ -491,9 +353,8 @@ void setTime(int yr, int month, int mday, int hr, int minute, int sec, int isDst
 bool set_RTC(void)
 {
   bool ret = false;
-  constexpr char s[] = "\nset_RTC(): external RTC ";
-  // Serial.print("set_RTC(): timeinfo.tm_year = ");
-  // Serial.println(timeinfo.tm_year);
+  // static constexpr const char txt1[] PROGMEM = "\nset_RTC(): external RTC ";
+  // std::cout << txt1 << "timeinfo.tm_year = " << (timeinfo.tm_year) << std::endl;
   if (timeinfo.tm_year + 1900 > 1900)
   {
     RTCtime.Hours   = timeinfo.tm_hour;
@@ -507,83 +368,37 @@ bool set_RTC(void)
 
     RTC.setDate(&RTCdate);
     RTC.setTime(&RTCtime);
-    std::cout << "set_RTC(): external RTC has been set" << std::endl;
-    //std::cout << "Check: " << std::endl;
-    /*
-    poll_date_RTC();
-    poll_time_RTC();
-    */
-    
-    /*
-    if (my_debug)
-    {
-      poll_RTC();
-      ret = true;
-    }
-    */
+    static constexpr const char txt2[] PROGMEM = "set_RTC(): external RTC has been set";
+    std::cout << txt2 << std::endl;
+
   }
   return ret;
-}
-
-void poll_RTC(void)
-{
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("poll_RTC(): ");
-  time_t t = time(NULL);
-  delay(500);
-
-  /// ESP32 internal timer
-  // struct tm timeinfo;
-  t = std::time(nullptr);
-
-  if (!my_debug)
-  {
-    std::tm* tm = std::gmtime(&t);  // for UTC.
-    std::cout << std::dec << *TAG << "ESP32 UTC : " 
-      << std::setw(4) << (tm->tm_year+1900) << "-"
-      << std::setfill('0') << std::setw(2) << (tm->tm_mon+1) << "-"
-      << std::setfill('0') << std::setw(2) << (tm->tm_mday) << " ("
-      << wd[tm->tm_wday] << ") "
-      << std::setfill('0') << std::setw(2) << (tm->tm_hour) << ":"
-      << std::setfill('0') << std::setw(2) << (tm->tm_min)  << ":"
-      << std::setfill('0') << std::setw(2) << (tm->tm_sec)  << std::endl;
-  }
-
-  if (!my_debug)
-  {
-    // std::tm* tm_local  Global var!
-    //tm_local = std::localtime(&t);  // for local timezone.
-    tm_local = localtime(&t);
-    elem_zone = std::get<0>(zones_map[zone_idx]);
-    std::cout << std::dec << *TAG << "ESP32 " << elem_zone             << ": " 
-      << std::setw(4)                      << (tm_local->tm_year+1900) << "-"
-      << std::setfill('0') << std::setw(2) << (tm_local->tm_mon+1)     << "-"
-      << std::setfill('0') << std::setw(2) << (tm_local->tm_mday)      << " ("
-      << wd[tm_local->tm_wday] << ") "
-      << std::setfill('0') << std::setw(2) << (tm_local->tm_hour)      << ":"
-      << std::setfill('0') << std::setw(2) << (tm_local->tm_min)       << ":"
-      << std::setfill('0') << std::setw(2) << (tm_local->tm_sec) << std::endl;
-  }
 }
 
 void printLocalTime()
 { 
   // Serial.print("printLocalTimer(): timeinfo.tm_year = ");
   // Serial.println(timeinfo.tm_year);
+  static constexpr const char txt1[] PROGMEM = "printLocalTime(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   struct tm my_timeinfo;
   if (getLocalTime(&my_timeinfo)) // update local time
   {
     if (my_timeinfo.tm_year + 1900 > 1900)
     {
-      elem_zone = std::get<0>(zones_map[zone_idx]);
-      // Serial.println(&my_timeinfo, "%A, %B %d %Y %H:%M:%S zone %Z %z ");
-      std:: cout << elem_zone.c_str() << ", " << std::put_time(&my_timeinfo, "%A, %B %d %Y %H:%M:%S zone %Z %z ") << std::endl;
+      static constexpr const char txt3[] PROGMEM = "Timezone: ";
+      static constexpr const char txt4[] PROGMEM = ", datetime: ";
+      elem_zone  = std::get<0>(zones_map[zone_idx]);
+      std::cout << *TAG << txt3 << elem_zone.c_str() << txt4 << std::put_time(&my_timeinfo, "%A, %B %d %Y %H:%M:%S zone %Z %z ") << std::endl;
+
     }
   }
 }
 
 void disp_data(void)
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("disp_data(): ");
+  static constexpr const char txt1[] PROGMEM = "disp_data(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   canvas.clear();
   cursor_x = canvas.getCursorX() - scrollstep;
   if (cursor_x <= 0)
@@ -594,7 +409,8 @@ void disp_data(void)
 
   if (!getLocalTime(&timeinfo)) // update local time
   {
-    std::cout << *TAG << "failed to get local time" << std::endl;
+    static constexpr const char txt2[] PROGMEM = "failed to get local time";
+    std::cout << *TAG << txt2 << std::endl;
     return;
   }  
 
@@ -709,136 +525,35 @@ void disp_msg(String str)
   canvas.clear();
 }
 
-/*
 bool connect_WiFi(void)
 {
+  static constexpr const char txt1[] PROGMEM = "connect_WiFi(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   bool ret = false;
-  std::cout << "\nWiFi:" << std::endl;
+
   WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
 
   for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)
   {
-    std::cout << "." << std::flush;
     delay(500);
   }
   if (WiFi.status() == WL_CONNECTED) 
   {
     ret = true;
-    std::cout << "\r\nWiFi Connected to: " << (WIFI_SSID) << std::endl;
-    IPAddress ip;
-    ip = WiFi.localIP();
-    std::cout << "IP address: " << std::flush;
-    std::string ipadd1 = std::string(WiFi.localIP().toString().c_str());
-    std::cout << ipadd1 << std::endl;
-    byte mac[6];
-    WiFi.macAddress(mac);
-    std::cout << "MAC: " << std::flush;
-    for (int i = 0; i < 6; i++)
-    {
-      std::cout << std::hex << std::setw(2) << std::setfill('0') 
-        << static_cast<int>(mac[i]) << std::flush;
-      if (i < 5) 
-        std::cout << ":" << std::flush;
-    }
-    std::cout << std::endl;
+    static constexpr const char txt3[] PROGMEM = "\r\nWiFi Connected";
+    std::cout << txt3 << std::endl;
   }
   else
   {
-    std::cout << "\r\nWiFi connection failed." << std::endl;
+    static constexpr const char txt6[] PROGMEM = "WiFi connection failed.";
+    std::cout << "\r\n" << txt6 << std::endl;
   }
   return ret;
-}
-*/
-
-bool connect_WiFi(void)
-{
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("connect_WiFi(): ");
-  bool ret = false;
-  if (my_debug)
-  {
-    std::cout << std::endl << "WiFi: " << std::flush;
-  }
-  WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
-
-  for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)
-  {
-    if (my_debug)
-      std::cout << "." << std::flush;
-    delay(500);
-  }
-  if (WiFi.status() == WL_CONNECTED) 
-  {
-    ret = true;
-    if (my_debug)
-      std::cout << "\r\nWiFi Connected to: " << WIFI_SSID << std::endl;
-    else
-      std::cout << "\r\nWiFi Connected" << std::endl;
-
-    if (my_debug)
-    {
-      IPAddress ip;
-      ip = WiFi.localIP();
-      // Convert IPAddress to string
-      String ipStr = ip.toString();
-      std::cout << "IP address: " << ipStr.c_str() << std::endl;
-
-      byte mac[6];
-      WiFi.macAddress(mac);
-
-      // Allocate a buffer of 18 characters (12 for MAC + 5 colons + 1 null terminator)
-      char* mac_buff = new char[18];
-
-      // Create a shared_ptr to manage the buffer with a custom deleter
-      std::shared_ptr<char> bufferPtr(mac_buff, customDeleter);
-
-      std::cout << *TAG << std::endl;
-
-      std::cout << "MAC: ";
-      for (int i = 0; i < 6; ++i)
-      {
-        if (i > 0) std::cout << ":";
-        std::cout << std::hex << (int)mac[i];
-      }
-      std::cout << std::dec << std::endl;
-    }
-  }
-  else
-  {
-    std::cout << "\r\n" << "WiFi connection failed." << std::endl;
-  }
-  return ret;
-}
-
-void customDeleter(char* buffer) {
-    // std::cout << "\nCustom deleter called\n" << std::endl;
-    delete[] buffer;
-}
-
-
-void getID(void)
-{
-  uint64_t chipid_EfM = ESP.getEfuseMac(); // The chip ID is essentially the MAC address 
-  char chipid[13] = {0};
-  sprintf( chipid,"%04X%08X", (uint16_t)(chipid_EfM>>32), (uint32_t)chipid_EfM );
-  std::cout << "\nESP32 Chip ID = " << chipid << "\n" << std::endl;
-  std::cout << "chipid mirrored (same as M5Burner MAC): " << std::flush;
-  // Mirror MAC address:
-  for (uint8_t i = 10; i >= 0; i-=2)  // 10, 8. 6. 4. 2, 0
-  {
-    std::cout << (chipid[i])    // bytes 10, 8, 6, 4, 2, 0
-    << (chipid[i+1])            // bytes 11, 9, 7. 5, 3, 1
-    << std::flush;
-    if (i > 0)
-      std::cout << ":" << std::flush;
-    if (i == 0)  // Note: this needs to be here. Yes, it is strange but without it the loop keeps on running.
-      break;     // idem.
-  }
 }
 
 bool ck_BtnA(void)
 {
   NanoC6.update();
-  //if (M5Dial.BtnA.isPressed())
   if (NanoC6.BtnA.wasPressed())  // 100 mSecs
     buttonPressed = true;
   else
@@ -856,8 +571,8 @@ void blink_blue_led(void)
 
 void rgb_led_wheel(bool pr_txt = false)
 {
-  const char txt[] = "RGB Led set to: ";
-  const char sColors[4][6] = {"RED", "GREEN", "BLUE", "BLACK"};
+  static constexpr const char txt[] PROGMEM = "RGB Led set to: ";
+  static constexpr const char sColors[4][6] PROGMEM = {"RED", "GREEN", "BLUE", "BLACK"};
   const int  iColors[4][3] = 
   {
     {255,   0,   0},
@@ -869,16 +584,6 @@ void rgb_led_wheel(bool pr_txt = false)
   
   for (int i = 0; i < le; i++)
   {
-    /*
-    canvas.scroll(-scrollstep, 0);
-    canvas.clear();
-    canvas.setCursor(hori[0], vert[0]+10);
-    canvas.printf("%s", txt);
-    canvas.setCursor(hori[0], vert[1]);
-    canvas.printf("%s", sColors[i]);
-    // Push the sprite to the display
-    canvas.pushSprite(0, 0);
-    */
     if (pr_txt)
       std::cout << (txt) << (sColors[i]) << std::endl;
     strip.setPixelColor(0, strip.Color(iColors[i][0], iColors[i][1], iColors[i][2]));
@@ -889,7 +594,8 @@ void rgb_led_wheel(bool pr_txt = false)
 
 void setup(void) 
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("setup(): ");
+  static constexpr const char txt1[] PROGMEM = "setup(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   // See: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/static/pdf/static/en/unit/oled.pdf
   display.begin();
   canvas.setColorDepth(1); // mono color
@@ -908,12 +614,11 @@ void setup(void)
   canvas.setTextSize(1);
   canvas.createSprite(display.width() + 64, 72);
   
-  // bool SerialEnable, bool I2CEnable, bool DisplayEnable
-  // Not using I2CEnable because of fixed values for SCL and SDA in M5Atom.begin:
-  NanoC6.begin(); // Init NanoC6
+  NanoC6.begin();
   
   //Serial.println(F("\n\nM5Stack Atom Matrix with RTC unit and OLED display unit test."));
-  std::cout << "\n\n" << *TAG << "M5NanoC6 Timezones with OLED and RTC units test." << std::endl;
+  static constexpr const char txt2[] PROGMEM = "M5NanoC6 Timezones with OLED and RTC units test.";
+  std::cout << "\n\n" << *TAG << txt2 << std::endl;
   
   //Wire.begin(SDA, SCL);
 
@@ -933,16 +638,9 @@ void setup(void)
   
   //Serial.begin(115200);  // This command is now done by M5NanoC6.begin()
 
-  getID();
-
   create_maps();  // creeate zones_map
 
-  map_replace_first_zone();
-
   RTC.begin();
-
-  // setup RTC ( NTP auto setting )
-  configTzTime(NTP_TIMEZONE, NTP_SERVER1, NTP_SERVER2, NTP_SERVER3);
 
   delay(1000);
 
@@ -972,32 +670,12 @@ void setup(void)
     sntp_initialize();  // name sntp_init() results in compilor error "multiple definitions sntp_init()"
     //sntp_sync_status_t sntp_sync_status = sntp_get_sync_status();
     int status = sntp_get_sync_status();
-    String txt = "";
-    if (status == SNTP_SYNC_STATUS_RESET) // SNTP_SYNC_STATUS_RESET
-      txt = "RESET";
-    else if (status == SNTP_SYNC_STATUS_COMPLETED)
-      txt = "COMPLETED";
-    else if (status == SNTP_SYNC_STATUS_IN_PROGRESS)
-      txt = "IN PROGRESS";
-    else
-      txt = "UNKNOWN";
-    
-    std::cout << *TAG << "sntp_sync_status = " << txt.c_str() << std::endl;
+    static constexpr const char txt6[] PROGMEM = "sntp sync status = ";
+    std::cout << *TAG << txt6 << std::to_string(status) << std::endl;
 
     zone_idx = 0;
     setTimezone(); // Set the timezone first
 
-    /*
-    if (initTime()) // Call initTime just 1 time here, then at time_sync_notification_cb()
-    {
-      if (set_RTC())
-      {
-        poll_RTC();  // Update RTCtimeinfo
-        printLocalTime();
-        disp_data();
-      }
-    }
-    */
   }
   else
   {
@@ -1008,7 +686,8 @@ void setup(void)
 
 void loop(void)
 {
-  std::shared_ptr<std::string> TAG = std::make_shared<std::string>("loop(): ");
+  static constexpr const char txt1[] PROGMEM = "loop(): ";
+  std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
   unsigned long interval_t = 5 * 60 * 1000; // 5 minutes
   unsigned long curr_t = 0L;
   unsigned long elapsed_t = 0L;
@@ -1041,7 +720,8 @@ void loop(void)
             if (set_RTC())
             {
               printLocalTime();
-              std::cout << std::endl << *TAG << "external RTC updated from NTP server datetime stamp" << std::endl;
+              static constexpr const char txt2[] PROGMEM = "external RTC updated from NTP server datetime stamp";
+              std::cout << std::endl << *TAG << txt2 << std::endl;
             }
           }
         }
@@ -1052,8 +732,10 @@ void loop(void)
 
         if (connect_try >= max_connect_try)
         {
-          std::cout << std::endl << *TAG << "WiFi connect try failed " << (connect_try) << 
-            "times.\nGoing into infinite loop....\n" << std::endl;
+          static constexpr const char txt3[] PROGMEM = "WiFi connect try failed ";
+          static constexpr const char txt4[] PROGMEM = "times.\nGoing into infinite loop....\n";
+          std::cout << std::endl << *TAG << txt3 << (connect_try) << 
+            txt4 << std::endl;
           break;
         }
       }
@@ -1073,28 +755,21 @@ void loop(void)
       TimeToChangeZone = true;
       digitalWrite(M5NANO_C6_BLUE_LED_PIN, HIGH);  // Switch on the Blue Led
       zone_chg_start_t = zone_chg_curr_t;
-      /*
-        Increases the Display color index.
-      */
-      FSM++;
-      if (FSM >= 6)
-      {
-        FSM = 0;
-      }
 
       /*
       Increase the zone_index, so that the sketch
       will display data from a next timezone in the map: time_zones.
       */
-      zone_idx++;
-      if (zone_idx >= zone_max_idx)
-      {
+      if (zone_idx < (nr_of_zones-1))
+        zone_idx++;
+      else
         zone_idx = 0;
-      }
+      if (zone_idx == 0)
+        std::cout << std::endl; // blank line
+      static constexpr const char txt5[] PROGMEM = "new zone_idx = ";
+      std::cout << *TAG << txt5 << zone_idx << std::endl;
       setTimezone();
       TimeToChangeZone = false;
-      if (my_debug)
-        poll_RTC();
       printLocalTime();
       digitalWrite(M5NANO_C6_BLUE_LED_PIN, LOW);  // Switch off the Blue Led
       disp_data();
@@ -1104,9 +779,12 @@ void loop(void)
     if (buttonPressed)
     {
       // We have a button press so do a software reset
-      std::cout << *TAG << "Button was pressed.\n" << 
-        "Going to do a software reset...\n" << std::endl;
-      disp_msg("Reset..."); // there is already a wait of 6000 in disp_msg()
+      static constexpr const char txt6[] PROGMEM = "Button was pressed.\n";
+      static constexpr const char txt7[] PROGMEM = "Going to do a software reset...\n";
+      static constexpr const char txt8[] PROGMEM = "Reset...";
+      std::cout << *TAG << txt6 << 
+        txt7 << std::endl;
+      disp_msg(txt8); // there is already a wait of 6000 in disp_msg()
       esp_restart();
     }
     // printLocalTime();
@@ -1115,8 +793,9 @@ void loop(void)
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   } // end-of-while
 
-  disp_msg("Bye...");
-  std::cout << *TAG << "Bye...\n" << std::endl;
+  static constexpr const char txt9[] PROGMEM = "Bye...";
+  disp_msg(txt9);
+  std::cout << *TAG << txt9 << std::endl << std::endl;
   /* Go into an endless loop after WiFi doesn't work */
   do
   {
