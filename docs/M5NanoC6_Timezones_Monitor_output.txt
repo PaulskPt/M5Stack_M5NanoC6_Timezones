@@ -1,71 +1,75 @@
-2024-10-13 13h50 utc+1
+2024-10-15 19h31 utc+1
 
-Board: M5Stack M5NanoC6 with connected to GROVE Port: M5 OLED and RGB units
+
+Board: M5Stack M5NanoC6 with connected to GROVE Port: OLED and RTC units
 
 Arduino IDE v2.3.3
 
-Sketch: M5NanoC6_Timezones.ino
+Sketch: M5NanoC6_Timezones_with_OLED_and_RTC_units.ino
+
+Note: just finished adding functionality to WiFi connect to my mobile phone. 
+      It worked immediately.
+	  Added global boolean variable: wait_until_sntp_notification_cb. This variable is set in function time_sync_notification_cb()
+	  It is reset in loop(). The idea is, at startup, that everything will wait until this global variable has been set.
+
+Note: to prevent 100% memory usage, I deleted some functions. Deleted all if (my_debug){...} blocks;
+      used "static constexpr const" and "PROGMEM" directives to try to move variables to program memory.
+
 
 Monitor output (partially):
 
-13:50:29.971 -> loop(): Button was pressed.
-13:50:29.971 -> Going to do a software reset...
-13:50:29.971 -> 
-13:50:36.061 -> ESP-ROM:esp32c6-20220919
-13:50:36.061 -> Build:Sep 19 2022
-13:50:36.061 -> rst:0xc (SW_CPU),boot:0x6d (SPI_FAST_FLASH_BOOT)
-13:50:36.061 -> Saved PC:0x4001975a
-13:50:36.061 -> SPIWP:0xee
-13:50:36.061 -> mode:DIO, clock div:2
-13:50:36.061 -> load:0x4086c410,len:0xcf8
-13:50:36.061 -> load:0x4086e610,len:0x2e30
-13:50:36.061 -> load:0x40875728,len:0x113c
-13:50:36.061 -> entry 0x4086c410
-13:50:36.701 -> 
-13:50:36.701 -> 
-13:50:36.701 -> setup(): M5NanoC6 Timezones with OLED and RTC units test.
-13:50:36.833 -> 
-13:50:36.833 -> ESP32 Chip ID = 1FFEFF043254
-13:50:36.833 -> 
-13:50:41.363 -> chipid mirrored (same as M5Burner MAC): 54:32:04:FF:FE:1F
-13:50:36.833 -> 
-13:50:41.363 -> WiFi Connected
-13:50:41.363 -> sntp_initialize(): sntp polling interval: 15 Minute(s)
-13:50:41.363 -> setup(): sntp_sync_status = RESET
-13:50:43.392 -> Europe/Lisbon, Monday, October 14 2024 13:50:44 zone WEST +0100 
-13:50:46.003 -> time_sync_notification_cb(): calling initTime()
-13:50:46.003 -> initTime(): Setting configTzTime to: "WET0WEST,M3.5.0/1,M10.5.0"
-13:50:46.003 -> initTime(): NTP Connected. 
-13:50:47.017 -> time_sync_notification_cb(): time synchronized at time (UTC): Mon Oct 14 12:50:48 2024  <<<=== NPT time sync
-13:51:09.108 -> America/Kentucky/Louisville, Monday, October 14 2024 08:51:10 zone EDT -0400 
-13:51:34.819 -> America/New_York, Monday, October 14 2024 08:51:35 zone EDT -0400 
-13:52:00.520 -> America/Sao_Paulo, Monday, October 14 2024 09:52:01 zone -03 -0300 
-13:52:26.244 -> Europe/Amsterdam, Monday, October 14 2024 14:52:27 zone CEST +0200 
-13:52:51.986 -> Australia/Sydney, Monday, October 14 2024 23:52:53 zone AEDT +1100 
-13:53:17.689 -> Europe/Lisbon, Monday, October 14 2024 13:53:18 zone WEST +0100 
-13:53:43.452 -> America/Kentucky/Louisville, Monday, October 14 2024 08:53:44 zone EDT -0400 
-13:54:09.157 -> America/New_York, Monday, October 14 2024 08:54:10 zone EDT -0400 
-13:54:34.886 -> America/Sao_Paulo, Monday, October 14 2024 09:54:35 zone -03 -0300 
-13:55:00.623 -> Europe/Amsterdam, Monday, October 14 2024 14:55:01 zone CEST +0200 
-13:55:26.327 -> Australia/Sydney, Monday, October 14 2024 23:55:27 zone AEDT +1100 
-13:55:52.024 -> Europe/Lisbon, Monday, October 14 2024 13:55:53 zone WEST +0100 
-13:56:17.774 -> America/Kentucky/Louisville, Monday, October 14 2024 08:56:18 zone EDT -0400 
-13:56:43.486 -> America/New_York, Monday, October 14 2024 08:56:44 zone EDT -0400 
-13:57:09.234 -> America/Sao_Paulo, Monday, October 14 2024 09:57:10 zone -03 -0300 
-13:57:34.935 -> Europe/Amsterdam, Monday, October 14 2024 14:57:36 zone CEST +0200 
-13:58:00.637 -> Australia/Sydney, Monday, October 14 2024 23:58:01 zone AEDT +1100 
-13:58:26.378 -> Europe/Lisbon, Monday, October 14 2024 13:58:27 zone WEST +0100 
+
+
+19:31:14.059 -> trying to connect WiFi to mobile phone    (On my Samsung S23 Ultra mobile phone (PA Móvel) identified as "esp32c6-1FB750")
+19:31:15.075 -> 
+
+19:31:15.075 -> WiFi Connected to mobile phone
+19:31:15.075 -> sntp_initialize(): sntp polling interval: 15 Minute(s)
+19:31:15.075 -> setup(): sntp sync status = 0
+19:31:19.074 -> loop(): status wait_until_sntp_notification_cb = true
+19:31:21.074 -> initTime(): NTP Connected. 
+19:31:21.074 -> loop(): time synchronized at time (UTC): Tue Oct 15 18:31:22 2024   <<<=== NTP sync
+19:31:23.076 -> set_RTC(): external RTC has been set
+19:31:23.076 -> 
+19:31:23.076 -> loop(): new zone_idx = 0
+19:31:24.096 -> printLocalTime(): Timezone: America/Kentucky/Louisville, datetime: Tuesday, October 15 2024 14:31:25 zone EDT -0400 
+19:31:48.825 -> loop(): new zone_idx = 1
+19:31:49.825 -> printLocalTime(): Timezone: America/New_York, datetime: Tuesday, October 15 2024 14:31:51 zone EDT -0400 
+19:32:14.516 -> loop(): new zone_idx = 2
+19:32:15.530 -> printLocalTime(): Timezone: America/Sao_Paulo, datetime: Tuesday, October 15 2024 15:32:17 zone -03 -0300 
+19:32:40.219 -> loop(): new zone_idx = 3
+19:32:41.258 -> printLocalTime(): Timezone: Europe/Lisbon, datetime: Tuesday, October 15 2024 19:32:42 zone WEST +0100 
+19:33:05.969 -> loop(): new zone_idx = 4
+19:33:06.966 -> printLocalTime(): Timezone: Europe/Amsterdam, datetime: Tuesday, October 15 2024 20:33:08 zone CEST +0200 
+19:33:31.704 -> loop(): new zone_idx = 5
+19:33:32.659 -> printLocalTime(): Timezone: Asia/Tokyo, datetime: Wednesday, October 16 2024 03:33:34 zone JST +0900 
+19:33:57.379 -> loop(): new zone_idx = 6
+19:33:58.414 -> printLocalTime(): Timezone: Australia/Sydney, datetime: Wednesday, October 16 2024 05:33:59 zone AEDT +1100 
+19:34:23.141 -> 
+19:34:23.141 -> loop(): new zone_idx = 0
+19:34:24.124 -> printLocalTime(): Timezone: America/Kentucky/Louisville, datetime: Tuesday, October 15 2024 14:34:25 zone EDT -0400 
 
 [...]
 
-14:04:00.770 -> America/Kentucky/Louisville, Monday, October 14 2024 09:04:01 zone EDT -0400 
-14:04:26.476 -> America/New_York, Monday, October 14 2024 09:04:27 zone EDT -0400 
-14:04:52.199 -> America/Sao_Paulo, Monday, October 14 2024 10:04:53 zone -03 -0300 
-14:05:17.961 -> Europe/Amsterdam, Monday, October 14 2024 15:05:19 zone CEST +0200 
-14:05:43.686 -> Australia/Sydney, Tuesday, October 15 2024 00:05:44 zone AEDT +1100 
-14:05:49.041 -> time_sync_notification_cb(): calling initTime()
-14:05:49.081 -> initTime(): Setting configTzTime to: "AEST-10AEDT,M10.1.0,M4.1.0/3"
-14:05:49.081 -> initTime(): NTP Connected. 
-14:05:50.065 -> time_sync_notification_cb(): time synchronized at time (UTC): Mon Oct 14 13:05:51 2024  <<<=== NPT time sync
+19:46:23.010 -> initTime(): NTP Connected. 
+19:46:23.010 -> loop(): time synchronized at time (UTC): Tue Oct 15 18:46:24 2024   <<<=== NTP sync (I saw the RGB led cycle the 3 colors)
+19:46:25.019 -> set_RTC(): external RTC has been set
 
-[...]
+[...[
+
+Note: I switched of the WiFi of the mobile phone. The following monitor output occurred:
+
+19:47:52.474 -> trying to connect WiFi to mobile phone 
+19:47:52.474 -> E (1000191) wifi:sta is connecting, return error
+19:48:02.487 -> trying to connect WiFi to fixed AP
+19:48:02.487 -> E (1010211) wifi:sta is connecting, return error
+19:48:07.305 -> 
+
+19:48:07.305 -> WiFi Connected to fixed AP
+19:48:07.305 -> loop(): new zone_idx = 3
+19:48:08.310 -> printLocalTime(): Timezone: Europe/Lisbon, datetime: Tuesday, October 15 2024 19:48:09 zone WEST +0100 
+
+
+Note: conclusion: the switching from mobile WiFi to fixed WiFi works OK!
+
+
