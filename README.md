@@ -121,7 +121,7 @@ Update 2024-10-15:
 How this sketch works:
 
 After startup the sketch the function create_maps() reads all the timezone and timezone_code text strings that are defined
-* in the file secret.h into a map (like a dictionary in Python). Then the sketch tries to make WiFi contact. If WiFi is OK, then, at fixed intervals, polling requests will be sent to the NTP server of your choice.
+* in the file secret.h into a map (like a dictionary in Python). Then the sketch tries to establish WiFi connection, primarily with a mobile phone (if it's WiFi credentials are set in file secret.h). If WiFi contact to the mobile phone fails, the sketch will try to establish WiFi connection with the fixed WiFi Access Point. If WiFi is OK, then, at fixed intervals, polling requests will be sent to the NTP server of your choice.
 The global variable CONFIG_LWIP_SNTP_UPDATE_DELAY defines the polling interval. In this moment 15 minutes.
 When the datetime stamp is received from an NTP server, the external RTC will be set. Next the sketch will cycle through and
 display timezone information and local date and time for each of the pre-programmed timezones.
