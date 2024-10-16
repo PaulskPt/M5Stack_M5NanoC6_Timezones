@@ -25,13 +25,6 @@
 * display timezone information and local date and time for each of siz pre-programmed timezones.
 * A cycle of displaying the seven timezones takes about 3 minutes.
 *
-* Update 2024-10-15:
-* - added functionality to connect to WiFi of a mobile phone;
-* - Moved some code from function initTime() to loop().
-* - Created global boolean variable "wait_until_sntp_notification_cb".
-*   This variable is set in function time_sntp_notification_cb(). It is used in loop() during startup() to make sure that certain
-*   events happen in a wanted order.
-*
 * See: Complete list of zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 *
 * License: MIT.
@@ -110,7 +103,6 @@ std::string elem_zone_code_old;
 bool zone_has_changed = false;
 
 bool my_debug = false;
-bool lStart = true;
 bool wait_until_sntp_notification_cb = false;
 bool use_local_time = false; // for the external RTC    (was: use_local_time = true // for the ESP32 internal clock )
 struct tm timeinfo;
@@ -516,8 +508,9 @@ void disp_data(void)
   delay(disp_data_view_delay);
 }
 
-void disp_msg(String str)
+void disp_msg(String str, int msg_delay = 6000)
 {
+  textdatum_t tdatum_old = canvas.getTextDatum(); // remember old TextDatum
   canvas.fillScreen(TFT_BLACK);
   //canvas.setBrightness(200);  // Make more brightness than normal
   canvas.clear();
@@ -525,9 +518,10 @@ void disp_msg(String str)
   canvas.drawString(str, display.width() / 2, display.height() / 2);
   display.waitDisplay();
   canvas.pushSprite(&display, 0, (display.height() - canvas.height()) >> 1);
-  delay(6000);
+  delay(msg_delay);
   canvas.fillScreen(TFT_BLACK);
   //canvas.setBrightness(disp_brightness); // Restore brightness to normal
+  canvas.setTextDatum(tdatum_old); // restore old TextDatum
   canvas.clear();
 }
 
@@ -549,13 +543,14 @@ bool connect_WiFi(void)
   {
     ret = true;
     static constexpr const char txt3[] PROGMEM = "\r\nWiFi Connected to mobile phone";
+    static constexpr const char txt3a[] PROGMEM = "WiFi mobile OK";
     std::cout << txt3 << std::endl;
+    disp_msg(txt3a, 3000);
   }
   else
   {
     /* Try WiFi fixed (at home) */
-  static constexpr const char txt4[] PROGMEM = "trying to connect WiFi to fixed AP";
-  std::cout << txt4 << std::endl;
+    static constexpr const char txt4[] PROGMEM = "trying to connect WiFi to fixed AP";
     WiFi.begin( WIFI_SSID, WIFI_PASSWORD );
     for (int i = 20; i && WiFi.status() != WL_CONNECTED; --i)
     {
@@ -565,7 +560,10 @@ bool connect_WiFi(void)
     {
       ret = true;
       static constexpr const char txt5[] PROGMEM = "\r\nWiFi Connected to fixed AP";
+      static constexpr const char txt4a[] PROGMEM = "WiFi fixed OK";
       std::cout << txt5 << std::endl;
+      disp_msg(txt4a, 3000);
+
     }
     else
     {
@@ -643,6 +641,7 @@ void setup(void)
   
   //Serial.println(F("\n\nM5Stack Atom Matrix with RTC unit and OLED display unit test."));
   static constexpr const char txt2[] PROGMEM = "M5NanoC6 Timezones with OLED and RTC units test.";
+  disp_msg("Timezones...", 3000);
   std::cout << "\n\n" << *TAG << txt2 << std::endl;
   
   //Wire.begin(SDA, SCL);
@@ -720,6 +719,7 @@ void loop(void)
   unsigned long zone_chg_elapsed_t = 0L;
   time_t t;
   bool dummy = false;
+  bool lStart = true;
 
   while (true)
   {
@@ -744,7 +744,7 @@ void loop(void)
     curr_t = millis();
     elapsed_t = curr_t - start_t;
 
-    if (lStart || elapsed_t >= interval_t)
+    if ( lStart || (elapsed_t >= interval_t) )
     {
       if (lStart)
         zone_idx = 0;
