@@ -135,7 +135,7 @@ After startup the sketch the function create_maps() reads all the timezone and t
 The global variable CONFIG_LWIP_SNTP_UPDATE_DELAY defines the polling interval. In this moment 15 minutes.
 When the datetime stamp is received from an SNTP server, the external RTC will be set. Next the sketch will cycle through and
 display timezone information and local date and time for each of the pre-programmed timezones.
-A cycle of displaying the size timezones takes about 3 minutes. When, during a cycle the WiFi connection is lost, the sketch tries to re-establish WiFi connection. The user will be informed with a short message on the OLED.
+A cycle of displaying the seven timezones takes about 3 minutes. When, during a cycle the WiFi connection is lost, the sketch tries to re-establish WiFi connection. The user will be informed with a short message on the OLED.
 
 Docs:
 
