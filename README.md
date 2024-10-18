@@ -43,7 +43,7 @@ M5NanoC6 reset:
 Pressing the M5NanoC6 button will cause a software reset.
 
 On reset the Arduino Sketch will try to connect to the WiFi Access Point of your choice (set in secret.h). 
-The sketch will connect to a SNTP server of your choice. In this version the sketch uses a ```NTP polling system```. 
+The sketch will connect to a SNTP server of your choice. In this version the sketch uses a ```SNTP polling system```. 
 The following define sets the SNTP polling interval time:
 
 ```
