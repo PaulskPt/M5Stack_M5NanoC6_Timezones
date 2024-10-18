@@ -36,23 +36,25 @@ For each of the seven timezones, in four steps, the following data will be displ
 Each time zone sequence of four displays is repeated for 25 seconds. This repeat time is defined in function ```loop()```:
 
 ```
-718 unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
+788 unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
 ```
 M5NanoC6 reset:
 
 Pressing the M5NanoC6 button will cause a software reset.
 
 On reset the Arduino Sketch will try to connect to the WiFi Access Point of your choice (set in secret.h). 
-The sketch will connect to a NTP server of your choice. In this version the sketch uses a ```NTP polling system```. 
-The following define sets the NTP polling interval time:
+The sketch will connect to a SNTP server of your choice. In this version the sketch uses a ```NTP polling system```. 
+The following define sets the SNTP polling interval time:
 
 ```
-105 #define CONFIG_LWIP_SNTP_UPDATE_DELAY  15 * 60 * 1000 // = 15 minutes
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY (15 * 60 * 1000)  // 15 minutes
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS   CONFIG_LWIP_SNTP_UPDATE_DELAY / 1000
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES   CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS / 60
 ```
 
-At the moment of a NTP Time Synchronization, the RGB Led of the M5NanoC6 wil cycle three colors.
+At the moment of a SNTP Time Synchronization, the RGB Led of the M5NanoC6 wil cycle three colors.
 At each change of Timezone, the built-in Blue Led of the M5NanoC6 will blink.
-The external RTC of the M5 RTC unit device will be set to the NTP datetime stamp with the local time for the current Timezone.
+The external RTC of the M5 RTC unit device will be set to the SNTP datetime stamp with the local time for the current Timezone.
 Next the sketch will display time zone name, timezone offset from UTC, date and time of the current Timezone.
 
 In the M5NanoC6 sketch is pre-programmed a map (dictionary), name ```zones_map```. At start, the function ```create_maps()```
@@ -117,6 +119,15 @@ Update 2024-10-15:
 - Moved some code from function initTime() to loop().
 - Created global boolean variable "wait_until_sntp_notification_cb".
   This variable is set in function time_sntp_notification_cb(). It is used in loop() during startup to make sure that certain events happen in a wanted order.
+```
+Update 2024-10-18:
+```
+- Copied a revised function time_sntp_notification_cb() from a similar sketch for the M5Dial (the version with RFID);
+  For this update/new definitions. CONFIG_LWIP_SNTP_UPDATE_DELAY, CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS and CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES;
+  Added preprocessor definition: #define DEBUG_OUTPUT 0, for now only used in function time_sntp_notification_cb();
+  Added global variable: sync_time;
+  Various changes in loop().
+
 ```
 How this sketch works:
 
