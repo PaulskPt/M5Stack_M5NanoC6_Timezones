@@ -42,10 +42,11 @@
 #include <M5NanoC6.h>
 #include <Unit_RTC.h>
 
-//#include <esp_sntp.h>
+/*
 #ifdef sntp_getoperatingmode
 #undef sntp_getoperatingmode
 #endif
+*/
 
 #include <esp_sntp.h>
 #include <WiFi.h>
@@ -91,21 +92,9 @@
 
 // 15U * 60U * 1000U = 15 minutes in milliseconds
 #define CONFIG_LWIP_SNTP_UPDATE_DELAY (15 * 60 * 1000)  // 15 minutes
-#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS   CONFIG_LWIP_SNTP_UPDATE_DELAY / 1000
-#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES   CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS / 60
 
-#define SDA 2
-#define SCL 1
-#define I2C_FREQ 400000
-#define I2C_PORT 0
-#define I2C_ADDR_OLED 0x3c
-#define I2C_ADDR_RTC  0x51
-
-M5UnitOLED display (SDA, SCL, I2C_FREQ, I2C_PORT, I2C_ADDR_OLED);
+M5UnitOLED display (2, 1, 400000, 0, 0x3c);
 M5Canvas canvas(&display);
-
-int dw = display.width();
-int dh = display.height();
 
 #define WIFI_SSID     SECRET_SSID // "YOUR WIFI SSID NAME"
 #define WIFI_PASSWORD SECRET_PASS //"YOUR WIFI PASSWORD"
@@ -120,14 +109,11 @@ std::string elem_zone_code;
 std::string elem_zone_code_old;
 bool zone_has_changed = false;
 
-bool my_debug = false;
 bool lStart = true;
 bool sync_time = false;
 time_t time_sync_epoch_at_start = 0;
 time_t last_time_sync_epoch = 0; // see: time_sync_notification_cb()
 struct tm timeinfo;
-bool use_timeinfo = true;
-std::tm* tm_local = {};
 //tm RTCdate;
 
 // 128 x 64
@@ -135,9 +121,6 @@ static constexpr const int hori[] = {0, 30, 50};
 static constexpr const int vert[] = {0, 30, 60, 90, 120};
 
 unsigned long start_t = millis();
-uint8_t FSM = 0;  // Store the number of key presses
-int connect_try = 0;
-int max_connect_try = 10;
 
 // Different versions of the framework have different SNTP header file names and availability.
 
@@ -153,20 +136,11 @@ int max_connect_try = 10;
 #define SNTP_ENABLED 0
 #endif
 
-
-Unit_RTC RTC(I2C_ADDR_RTC);
-
-rtc_time_type RTCtime;
-rtc_date_type RTCdate;
-
-char str_buffer[64];
+Unit_RTC RTC(0x51);
 
 /* See: https://github.com/espressif/arduino-esp32/blob/master/variants/m5stack_nanoc6/pins_arduino.h */
 #define M5NANO_C6_BLUE_LED_PIN     7  // D4
-#define M5NANO_C6_BTN_PIN          9  // D6
-#define M5NANO_C6_IR_TX_PIN        3  // A3
-#define M5NANO_C6_RGB_LED_PWR_PIN  19 
-#define M5NANO_C6_RGB_LED_DATA_PIN 20
+
 
 #define NUM_LEDS 1
 
@@ -248,7 +222,7 @@ void ntp_sync_notification_txt(bool show)
   else
   {
     //canvas.fillRect(dw/2-25, 15, 50, 25, BLACK);
-    canvas.fillRect(0, 0, dw-1, 55, BLACK);
+    canvas.fillRect(0, 0, display.width()-1, 55, BLACK);
   }
 }
 
@@ -293,6 +267,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     last_time_sync_epoch = currentTime;
       
 #if DEBUG_OUTPUT
+    #define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES   CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS / 60
     static constexpr const char txt5[]  PROGMEM = "CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_";
     static constexpr const char txt5a[] PROGMEM = "SECONDS = ";
     static constexpr const char txt5b[] PROGMEM = "MINUTES = ";
@@ -304,6 +279,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     std::cout << *TAG << txt6 << " = " << currentTime << ", " << txt7 << " = " << last_time_sync_epoch << std::endl;
     std::cout << *TAG << txt8 << " = " << diff_t << std::endl;
 #endif
+    #define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS   CONFIG_LWIP_SNTP_UPDATE_DELAY / 1000
 
     if ((diff_t >= CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS) || lStart) {
       sync_time = true; // See loop initTime
@@ -425,6 +401,9 @@ void setTime(int yr, int month, int mday, int hr, int minute, int sec, int isDst
 bool set_RTC(void)
 {
   bool ret = false;
+  rtc_time_type RTCtime;
+  rtc_date_type RTCdate;
+
   // static constexpr const char txt1[] PROGMEM = "\nset_RTC(): external RTC ";
   // std::cout << txt1 << "timeinfo.tm_year = " << (timeinfo.tm_year) << std::endl;
   if (timeinfo.tm_year + 1900 > 1900)
@@ -550,7 +529,7 @@ void disp_data(void)
   if (ck_BtnA())
     return;
   canvas.clear();
-  // canvas.fillRect(0, vert[0], dw-1, dh-1, BLACK);
+  // canvas.fillRect(0, vert[0],display.width()-1, display.height()-1, BLACK);
   canvas.setCursor(hori[0], vert[0]+5);
   canvas.print("Zone");
   canvas.setCursor(hori[0], vert[1]);
@@ -693,6 +672,9 @@ void setup(void)
 {
   static constexpr const char txt1[] PROGMEM = "setup(): ";
   std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
+  #define M5NANO_C6_RGB_LED_PWR_PIN  19 
+  #define M5NANO_C6_RGB_LED_DATA_PIN 20
+
   // See: https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/static/pdf/static/en/unit/oled.pdf
   display.begin();
   canvas.setColorDepth(1); // mono color
@@ -774,10 +756,6 @@ void setup(void)
     //zone_idx = 0;
     //setTimezone(); // Set the timezone first
   }
-  else
-  {
-    connect_try++;
-  }
   canvas.clear();
 }
 
@@ -788,6 +766,8 @@ void loop(void)
   unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
   unsigned long zone_chg_curr_t = 0L;
   unsigned long zone_chg_elapsed_t = 0L;
+  int connect_try = 0;
+  int max_connect_try = 10;
   time_t t;
   bool dummy = false;
 
