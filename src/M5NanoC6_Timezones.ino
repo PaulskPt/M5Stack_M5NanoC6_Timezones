@@ -21,9 +21,17 @@
 * Then the sketch tries to make WiFi contact. If WiFi is OK, then s polling sequence interval request will be set.
 * At the polling interval time a requeste for a datetime will be sent to the NTP server.
 * The global variable CONFIG_LWIP_SNTP_UPDATE_DELAY defines the polling interval. In this moment 15 minutes.
-* When the datetime stamp is received from an NTP server, the external RTC will be set. Next the sketch will cycle through and
-* display timezone information and local date and time for each of siz pre-programmed timezones.
+* When the datetime stamp is received from an SNTP server, the external RTC will be set. Next the sketch will cycle through and
+* display timezone information and local date and time for each of seven pre-programmed timezones.
 * A cycle of displaying the seven timezones takes about 3 minutes.
+*
+* Update 2024-10-18: 
+* Added preprocessing directive DEBUG_OUTPUT. It is set to zero. Handles a block in function time_sync_notification_cb()
+* Added global variable time_sync.
+* changed global variable CONFIG_LWIP_SNTP_UPDATE_DELAY into uint32_t. 
+* Added global variables: CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS, CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES.
+* function time_sync_notification_cb() revised (with help of MS CoPilot).
+* changed function bool().
 *
 * See: Complete list of zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 *
@@ -39,8 +47,6 @@
 #undef sntp_getoperatingmode
 #endif
 
-//#include "C:\\Users\\pauls2\\Documenten\\Arduino\\hardware\\espressif\\esp32\\tools\\sdk\\esp32\\include\\lwip\\lwip\\src\\include\\lwip\\apps\\sntp.h"
-//#include <sntp.h>
 #include <esp_sntp.h>
 #include <WiFi.h>
 #include <TimeLib.h>
@@ -67,9 +73,27 @@
 #include "freertos/queue.h"
 #include <Wire.h>
 
-namespace {
+// namespace {
 
-/* See: https://github.com/espressif/arduino-esp32/blob/master/variants/m5stack_nanoc6/pins_arduino.h */
+#define DEBUG_OUTPUT 0 // Off
+
+/*
+* IMPORTANT NOTE:
+* Don't use expressions like 
+* const uint32_t CONFIG_LWIP_SNTP_UPDATE_DELAY = 300000U; 
+* It provokes a compilor error. The compiler "ate" the #define versions below
+*/
+
+// Interval set to: 900000 mSec = 15 minutes in milliseconds (15 seconds is the minimum),
+// See: https://github.com/espressif/esp-idf/blob/master/components/lwip/apps/sntp/sntp.c
+// 300000 dec = 0x493E0 = 20 bits  ( 5 minutes)
+// 900000 dec = 0xDBBA0 = 20 bits  (15 minutes)
+
+// 15U * 60U * 1000U = 15 minutes in milliseconds
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY (15 * 60 * 1000)  // 15 minutes
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS   CONFIG_LWIP_SNTP_UPDATE_DELAY / 1000
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES   CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS / 60
+
 #define SDA 2
 #define SCL 1
 #define I2C_FREQ 400000
@@ -91,20 +115,16 @@ int dh = display.height();
 #define NTP_SERVER2   "1.pool.ntp.org"
 #define NTP_SERVER3   "2.pool.ntp.org"
 
-#ifdef CONFIG_LWIP_SNTP_UPDATE_DELAY   // Found in: Component config > LWIP > SNTP
-#undef CONFIG_LWIP_SNTP_UPDATE_DELAY
-#endif
-
-#define CONFIG_LWIP_SNTP_UPDATE_DELAY  15 * 60 * 1000 // = 15 minutes (15 seconds is the minimum). Original setting: 3600000  // 1 hour
-
 std::string elem_zone;
 std::string elem_zone_code;
 std::string elem_zone_code_old;
 bool zone_has_changed = false;
 
 bool my_debug = false;
-bool wait_until_sntp_notification_cb = false;
-bool use_local_time = false; // for the external RTC    (was: use_local_time = true // for the ESP32 internal clock )
+bool lStart = true;
+bool sync_time = false;
+time_t time_sync_epoch_at_start = 0;
+time_t last_time_sync_epoch = 0; // see: time_sync_notification_cb()
 struct tm timeinfo;
 bool use_timeinfo = true;
 std::tm* tm_local = {};
@@ -141,6 +161,7 @@ rtc_date_type RTCdate;
 
 char str_buffer[64];
 
+/* See: https://github.com/espressif/arduino-esp32/blob/master/variants/m5stack_nanoc6/pins_arduino.h */
 #define M5NANO_C6_BLUE_LED_PIN     7  // D4
 #define M5NANO_C6_BTN_PIN          9  // D6
 #define M5NANO_C6_IR_TX_PIN        3  // A3
@@ -175,7 +196,7 @@ static constexpr const int nr_of_zones = SECRET_NTP_NR_OF_ZONES[0] - '0';  // As
 
 std::map<int, std::tuple<std::string, std::string>> zones_map;
 
-} // end-of-namespace
+//} // end-of-namespace
 
 // Function prototype (to prevent error 'rgb_led_wheel' was not declared in this scope)
 void rgb_led_wheel(bool);
@@ -231,33 +252,86 @@ void ntp_sync_notification_txt(bool show)
   }
 }
 
-void time_sync_notification_cb(struct timeval *tv)
-{
+/* Code by MS CoPilot */
+// The sntp callback function
+void time_sync_notification_cb(struct timeval *tv) {
   static constexpr const char txt1[] PROGMEM = "time_sync_notification_cb(): ";
   std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
-  //static constexpr const char txt2[] PROGMEM = "calling initTime()";
-  //std::cout << *TAG << txt2 << std::endl;
-  wait_until_sntp_notification_cb = true;
-  
+
+  // Get the current time  (very important!)
+  time_t currentTime = time(nullptr);
+  // Convert time_t to GMT struct tm
+  struct tm* gmtTime = gmtime(&currentTime);
+  uint16_t diff_t;
+
+#if DEBUG_OUTPUT
+  // Added by @PaulskPt. I want to see the state of global var lStart!
+  static constexpr const char txt2[] PROGMEM = "lStart = ";
+  std::cout << *TAG << txt2 << lStart << std::endl;
+
+  static constexpr const char txt3[] PROGMEM = "Current time_t: ";
+  std::cout << *TAG << txt3 << currentTime << std::endl;
+#endif
+  // Added by @PaulskPt. I want to see GMT time in this moment!
+  static constexpr const char txt4[] PROGMEM = "Current GMT Time: ";
+  std::cout << *TAG << txt4 << asctime(gmtTime);
+  // ... end of addition by @PaulskPt
+
+  // Set the starting epoch time if not set, only when lStart is true
+  if (lStart && (time_sync_epoch_at_start == 0) && (currentTime > 0)) {
+    time_sync_epoch_at_start = currentTime;  // Set only once!
+  }
+
+  // Set the last sync epoch time if not set
+  if ((last_time_sync_epoch == 0) && (currentTime > 0)) {
+    last_time_sync_epoch = currentTime;
+  }
+
+  if (currentTime > 0) {   
+    // code added by @PaulskPt to test my ideas
+    diff_t = currentTime - last_time_sync_epoch;
+    last_time_sync_epoch = currentTime;
+      
+#if DEBUG_OUTPUT
+    static constexpr const char txt5[]  PROGMEM = "CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_";
+    static constexpr const char txt5a[] PROGMEM = "SECONDS = ";
+    static constexpr const char txt5b[] PROGMEM = "MINUTES = ";
+    std::cout << txt5 << txt5a << std::to_string(CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS) << std::endl;
+    std::cout << txt5 << txt5b << std::to_string(CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES) << std::endl;
+    static constexpr const char txt6[] PROGMEM = "currentTime";
+    static constexpr const char txt7[] PROGMEM = "last_time_sync_epoch";
+    static constexpr const char txt8[] PROGMEM = "diff_t";
+    std::cout << *TAG << txt6 << " = " << currentTime << ", " << txt7 << " = " << last_time_sync_epoch << std::endl;
+    std::cout << *TAG << txt8 << " = " << diff_t << std::endl;
+#endif
+
+    if ((diff_t >= CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS) || lStart) {
+      sync_time = true; // See loop initTime
+      ntp_sync_notification_txt(true);
+    }
+    // end of code added by @PaulskPt
+  }
 }
 
-void esp_sntp_initialize()
-{
+/* ... End of code by MS CoPilot */
+
+void esp_sntp_initialize() {
   static constexpr const char txt1[] PROGMEM = "sntp_initialize(): ";
   std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
-  if (esp_sntp_enabled()) 
-  { 
+   if (esp_sntp_enabled()) { 
     esp_sntp_stop();  // prevent initialization error
   }
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
   esp_sntp_setservername(0, NTP_SERVER1);
   esp_sntp_set_sync_interval(CONFIG_LWIP_SNTP_UPDATE_DELAY);
-  esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+  esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb); // Set the notification callback function
   esp_sntp_init();
-  
-  static constexpr const char txt4[] PROGMEM = "sntp polling interval: ";
+
+  // check the set sync_interval
+  uint32_t rcvd_sync_interval_secs = esp_sntp_get_sync_interval();
+  static constexpr const char txt4[] PROGMEM = "sntp polling interval (readback from SNTP server): ";
   static constexpr const char txt5[] PROGMEM = " Minute(s)";
-  std::cout << *TAG << txt4 << std::to_string(CONFIG_LWIP_SNTP_UPDATE_DELAY/60000) << txt5 << std::endl;
+  std::cout << *TAG << txt4 << std::to_string(rcvd_sync_interval_secs/60000) << txt5 << std::endl;
 }
 
 void setTimezone(void)
@@ -711,15 +785,11 @@ void loop(void)
 {
   static constexpr const char txt1[] PROGMEM = "loop(): ";
   std::shared_ptr<std::string> TAG = std::make_shared<std::string>(txt1);
-  unsigned long interval_t = 5 * 60 * 1000; // 5 minutes
-  unsigned long curr_t = 0L;
-  unsigned long elapsed_t = 0L;
   unsigned long const zone_chg_interval_t = 25 * 1000L; // 25 seconds
   unsigned long zone_chg_curr_t = 0L;
   unsigned long zone_chg_elapsed_t = 0L;
   time_t t;
   bool dummy = false;
-  bool lStart = true;
 
   while (true)
   {
@@ -734,50 +804,29 @@ void loop(void)
 
       if (connect_try >= max_connect_try)
       {
-        static constexpr const char txt3[] PROGMEM = "WiFi connect try failed ";
-        static constexpr const char txt4[] PROGMEM = "times.\nGoing into infinite loop....\n";
-        std::cout << std::endl << *TAG << txt3 << (connect_try) << txt4 << std::endl;
+        static constexpr const char txt2[] PROGMEM = "WiFi connect try failed ";
+        static constexpr const char txt3[] PROGMEM = "times.\nGoing into infinite loop....\n";
+        std::cout << std::endl << *TAG << txt2 << (connect_try) << txt3 << std::endl;
         break;
       }
     }
 
-    curr_t = millis();
-    elapsed_t = curr_t - start_t;
-
-    if ( lStart || (elapsed_t >= interval_t) )
-    {
-      if (lStart)
-        zone_idx = 0;
-      start_t = curr_t;
-      /*
-      * Wait until the function time_sync_notification_cb has been called.
-        We don't want other functionalities like disp_data() (see below) are being executed before.
-      */
-      while (!wait_until_sntp_notification_cb)
-        delay(1000);
-      if (wait_until_sntp_notification_cb)
-      {
-        std::cout << *TAG << "status wait_until_sntp_notification_cb = " << (wait_until_sntp_notification_cb == true ? "true" : "false") << std::endl;
-        wait_until_sntp_notification_cb = false; // reset global flag
-        if (initTime())
-        {
+    if (sync_time || lStart) {
+      if (sync_time) {
+        if (initTime()) {
           time_t t = time(NULL);
-          static constexpr const char txt3[] PROGMEM = "time synchronized at time (UTC): ";
-          std::cout << *TAG << txt3 << asctime(gmtime(&t)) << std::flush;  // prevent a 2nd LF. Do not use std::endl
-          ntp_sync_notification_txt(true);
+          static constexpr const char txt4[] PROGMEM = "time synchronized at time (UTC): ";
+          std::cout << *TAG << txt4 << asctime(gmtime(&t)) << std::flush;  // prevent a 2nd LF. Do not use std::endl
 
-          if (set_RTC())
-          {
-            printLocalTime();
-            static constexpr const char txt2[] PROGMEM = "external RTC updated from NTP server datetime stamp";
-            std::cout << std::endl << *TAG << txt2 << std::endl;
+          if (set_RTC()) {
+            static constexpr const char txt5[] PROGMEM = "external RTC updated from NTP server datetime stamp";
+            std::cout << *TAG << txt5 << std::endl;
           }
         }
+        sync_time = false;
       }
-      if (lStart)
-        zone_idx = -1; // Reset again
     }
-  
+
     zone_chg_curr_t = millis();
 
     zone_chg_elapsed_t = zone_chg_curr_t - zone_chg_start_t;
@@ -785,7 +834,9 @@ void loop(void)
     /* Do a zone change */
     if (lStart || (zone_chg_elapsed_t >= zone_chg_interval_t))
     {
-      lStart = false;
+      if (lStart)
+        zone_idx = -1; // will be increased in code below
+      
       TimeToChangeZone = true;
       zone_chg_start_t = zone_chg_curr_t;
       digitalWrite(M5NANO_C6_BLUE_LED_PIN, HIGH);  // Switch on the Blue Led
@@ -801,8 +852,9 @@ void loop(void)
       
       if (zone_idx == 0)
         std::cout << std::endl; // blank line
-      static constexpr const char txt5[] PROGMEM = "new zone_idx = ";
-      std::cout << *TAG << txt5 << zone_idx << std::endl;
+      
+      static constexpr const char txt6[] PROGMEM = "new zone_idx = ";
+      std::cout << *TAG << txt6 << zone_idx << std::endl;
       setTimezone();
       TimeToChangeZone = false;
       printLocalTime();
@@ -814,23 +866,24 @@ void loop(void)
     if (buttonPressed)
     {
       // We have a button press so do a software reset
-      static constexpr const char txt6[] PROGMEM = "Button was pressed.\n";
-      static constexpr const char txt7[] PROGMEM = "Going to do a software reset...\n";
-      static constexpr const char txt8[] PROGMEM = "Reset...";
-      std::cout << *TAG << txt6 << 
-        txt7 << std::endl;
-      disp_msg(txt8); // there is already a wait of 6000 in disp_msg()
+      static constexpr const char txt7[] PROGMEM = "Button was pressed.\n";
+      static constexpr const char txt8[] PROGMEM = "Going to do a software reset...\n";
+      static constexpr const char txt9[] PROGMEM = "Reset...";
+      std::cout << *TAG << txt7 << 
+        txt8 << std::endl;
+      disp_msg(txt9); // there is already a wait of 6000 in disp_msg()
       esp_restart();
     }
     // printLocalTime();
     disp_data();
+    lStart = false;
     NanoC6.update();  // Read the press state of the key.
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   } // end-of-while
 
-  static constexpr const char txt9[] PROGMEM = "Bye...";
-  disp_msg(txt9);
-  std::cout << *TAG << txt9 << std::endl << std::endl;
+  static constexpr const char txt10[] PROGMEM = "Bye...";
+  disp_msg(txt10);
+  std::cout << *TAG << txt10 << std::endl << std::endl;
   /* Go into an endless loop after WiFi doesn't work */
   do
   {
