@@ -131,7 +131,7 @@ Update 2024-10-18:
 ```
 Update 2024-10-23:
 ```
-This update had a totaly revised function disp_data(). The previous version had a memory leak.
+This update has a totaly revised function disp_data(). The previous version had a memory leak.
 ```
 How this sketch works:
 
