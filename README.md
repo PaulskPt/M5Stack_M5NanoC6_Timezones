@@ -129,6 +129,10 @@ Update 2024-10-18:
   Various changes in loop().
 
 ```
+Update 2024-10-23:
+```
+This update had a totaly revised function disp_data(). The previous version had a memory leak.
+```
 How this sketch works:
 
 After startup the sketch the function create_maps() reads all the timezone and timezone_code text strings that are defined in the file secret.h into a map (like a dictionary in Python). Then the sketch tries to establish WiFi connection, primarily with a mobile phone (if it's WiFi credentials are set in file secret.h). If WiFi contact to the mobile phone fails, the sketch will try to establish WiFi connection with the fixed WiFi Access Point. If WiFi is OK, then, a polling interval value will be sent to the SNTP server of your choice.
