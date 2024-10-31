@@ -145,7 +145,7 @@ void esp_sntp_initialize() {
    if (esp_sntp_enabled()) { 
     esp_sntp_stop();  // prevent initialization error
   }
-  esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
   esp_sntp_setservername(0, NTP_SERVER1);
   esp_sntp_set_sync_interval(CONFIG_LWIP_SNTP_UPDATE_DELAY);
   esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb); // Set the notification callback function
