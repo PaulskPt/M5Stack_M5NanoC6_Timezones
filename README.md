@@ -109,7 +109,8 @@ As you can see, I have the timezones are ordered in offset to UTC, however this 
 Update 2024-10-13: Solved a problem that there was no board "M5NanoC6". In Arduino IDE v2.3.3. BOARDS MANAGER
 appeared to be installed "esp32 from Espressif Systems" version "3.1.0 RC". 
 I downgraded it to the stable version "3.0.5", which contains the "M5NanoC6"
-Device info in pins_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x1001
+Device info in pins_arduino.h : M5Stack M5NanoC6 : USB_VID 0x303A, USB_PID 0x1001.
+In Arduino IDE v2.3.3 chose board: Tools -> Board -> esp32 -> M5NanoC6.
 
 Update 2024-10-14: in function disp_data() the integer variable disp_data_view_delay controls the "rithm" of renewal of the 4 view pages.
 
