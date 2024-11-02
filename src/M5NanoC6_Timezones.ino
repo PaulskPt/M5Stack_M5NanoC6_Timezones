@@ -26,7 +26,7 @@
 
 // namespace {
 
-#define CONFIG_LWIP_SNTP_UPDATE_DELAY (15 * 60 * 1000)  // 15 minutes
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY (60 * 60 * 1000)  // 50 minutes
 
 M5UnitOLED display (2, 1, 400000, 0, 0x3c); // Create an instance of the M5UnitOLED class
 
