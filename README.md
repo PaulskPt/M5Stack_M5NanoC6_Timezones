@@ -47,7 +47,7 @@ The sketch will connect to a SNTP server of your choice. In this version the ske
 The following define sets the SNTP polling interval time:
 
 ```
-#define CONFIG_LWIP_SNTP_UPDATE_DELAY (15 * 60 * 1000)  // 15 minutes
+#define CONFIG_LWIP_SNTP_UPDATE_DELAY (60 * 60 * 1000)  // 60 minutes
 #define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS   CONFIG_LWIP_SNTP_UPDATE_DELAY / 1000
 #define CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_MINUTES   CONFIG_LWIP_SNTP_UPDATE_DELAY_IN_SECONDS / 60
 ```
